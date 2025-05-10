@@ -2,7 +2,7 @@
 
 # Terraform AWS 3-Tier Architecture Template
 
-This repository provides a Terraform template to deploy a common 3-Tier web architecture on AWS. It's designed to be a starting point for your own projects, allowing for quick setup and customization.
+This repository provides a Terraform template to provision a common 3-Tier web architecture on AWS. It's designed to be a starting point for your own projects, allowing for quick setup and customization.
 
 ## Architecture Overview
 
@@ -198,7 +198,7 @@ This template is provided as a starting point. For production environments, cons
 ## 한국어
 # AWS 3티어 아키텍처 Terraform 템플릿
 
-티피컬한 AWS 3티어(3-Tier) 웹 아키텍처를 배포하기 위한 Terraform 템플릿
+티피컬한 AWS 3티어(3-Tier) 웹 아키텍처를 프로비저닝하기 위한 Terraform 템플릿
 이 템플릿은 여러분의 프로젝트를 위한 시작점으로 설계되어, 신속한 인프라 설정과 사용자 정의를 가능하게 합니다.
 
 ## 아키텍처 개요
