@@ -63,6 +63,8 @@ The architecture consists of three main tiers:
 *   **Route Tables:** Control the flow of traffic within your VPC.
 *   **Security Groups:** Act as virtual firewalls for your instances, controlling inbound and outbound traffic at the instance level.
 
+<br>
+
 ## Prerequisites
 
 Before you begin, ensure you have the following:
@@ -72,6 +74,9 @@ Before you begin, ensure you have the following:
     *   Run `aws configure` if you haven't already.
 3.  **Terraform:** Installed on your local machine (version >= 1.3.0 recommended).
 4.  **Git:** Installed on your local machine.
+
+<br>
+
 
 ## Getting Started
 
@@ -109,6 +114,9 @@ Before you begin, ensure you have the following:
     ```
     Type `yes` when prompted to confirm.
 
+<br>
+
+
 ## Key User Inputs (Customize in `terraform.tfvars`)
 
 You **must** or **should** customize the following variables in your `terraform.tfvars` file:
@@ -144,6 +152,9 @@ You **must** or **should** customize the following variables in your `terraform.
 
 Refer to `variables.tf` in the root directory and within each module for a full list of available input variables and their descriptions.
 
+<br>
+
+
 ## Outputs
 
 After a successful `terraform apply`, the following outputs will be displayed:
@@ -159,6 +170,9 @@ You can also view outputs at any time using:
 terraform output
 ```
 
+<br>
+
+
 ## Cleaning Up
 
 To destroy all resources created by this Terraform configuration:
@@ -168,17 +182,18 @@ terraform destroy
 ```
 Type `yes` when prompted to confirm. **Be careful, as this will delete all managed infrastructure.**
 
+<br>
+
+
 ## Disclaimer
 
 This template is provided as a starting point. For production environments, consider additional security hardening, monitoring, logging, backup strategies, and cost optimization measures.
 
-<br>
-
 ---
 
+
 <br>
-<br>
-<br>
+
 
 ## 한국어
 # AWS 3티어 아키텍처 Terraform 템플릿
@@ -245,6 +260,9 @@ This template is provided as a starting point. For production environments, cons
 *   **라우팅 테이블(Route Tables):** VPC 내의 트래픽 흐름을 제어합니다.
 *   **보안 그룹(Security Groups):** 인스턴스 수준에서 작동하는 가상 방화벽으로, 인스턴스로 들어오고 나가는 트래픽을 제어합니다.
 
+<br>
+
+
 ## 사전 준비 사항
 
 시작하기 전에 다음 사항을 준비해야 합니다:
@@ -254,6 +272,9 @@ This template is provided as a starting point. For production environments, cons
     *   아직 구성하지 않았다면 `aws configure` 명령을 실행.
 3.  **Terraform:** 로컬 머신에 설치되어 있어야 합니다 (버전 >= 1.3.0 권장).
 4.  **Git:** 로컬 머신에 설치되어 있어야 합니다.
+
+<br>
+
 
 ## 시작하기
 
@@ -290,6 +311,9 @@ This template is provided as a starting point. For production environments, cons
     ```
     확인 메시지가 나타나면 `yes`를 입력
 
+<br>
+
+
 ## 주요 사용자 입력값 (`terraform.tfvars`에서 사용자 정의)
 
 `terraform.tfvars` 파일에서 다음 변수들을 **반드시** 또는 **필요에 따라** 사용자 정의해야 합니다:
@@ -325,6 +349,9 @@ This template is provided as a starting point. For production environments, cons
 
 사용 가능한 모든 입력 변수와 설명은 루트 디렉토리 및 각 모듈 내의 `variables.tf` 파일을 참조
 
+<br>
+
+
 ## 출력값
 
 `terraform apply`가 성공적으로 실행된 후 다음 출력값이 표시됩니다:
@@ -339,6 +366,9 @@ This template is provided as a starting point. For production environments, cons
 ```bash
 terraform output
 ```
+
+<br>
+
 
 ## 리소스 정리하기
 
