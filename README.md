@@ -63,10 +63,10 @@ This Terraform project provisions the following 3-Tier architecture on AWS:
 | Component                | Description                                                                                                            |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
 | **VPC 10.0.0.0/16**      | Isolated network containing all resources.                                                                             |
-| **Subnets**              | *Public :* 10.0.1.0/24, 10.0.10.0/24  •  *App Private :* 10.0.2.0/24, 10.0.11.0/24  •  *Data Private :* 10.0.3.0/24, 10.0.12.0/24 |
+| **Subnets**              | *Public :* 10.0.1.0/24, 10.0.10.0/24  -  *App Private :* 10.0.2.0/24, 10.0.11.0/24  -  *Data Private :* 10.0.3.0/24, 10.0.12.0/24 |
 | **Internet Gateway (IGW)** | Enables inbound/outbound internet for public subnets & ALB.                                                          |
 | **NAT Gateway × 2**       | Placed in each public subnet for egress from private subnets; resilient to single-AZ failure.                         |
-| **Route Tables**          | • Public RT → IGW   • Private-App RT → AZ NATGW   • Private-Data RT (no 0.0.0.0/0).                                    |
+| **Route Tables**          | - Public RT → IGW   - Private-App RT → AZ NATGW   - Private-Data RT (no 0.0.0.0/0).                                    |
 | **Security Groups**       | Principle of least privilege (ALB→Web, Web→App, App→Redis/RDS).                                                       |
 | **AWS VPC Endpoints (Optional)** | S3 & DynamoDB Gateway endpoints, Interface endpoints for SSM/CloudWatch to reduce NAT traffic & cost.           |
 | **CloudWatch / KMS / Kinesis** | Centralised logging, metrics, alarms; encrypted with CMK where applicable.                                       |
@@ -82,7 +82,6 @@ This Terraform project provisions the following 3-Tier architecture on AWS:
 6. Any outbound call (patch, external API, S3 log upload) exits via the AZ-local **NAT Gateway**.  
 7. Response propagates back up to the client.
 
----
 
 ### High-Availability & Resilience Highlights
 
@@ -98,125 +97,115 @@ This Terraform project provisions the following 3-Tier architecture on AWS:
 
 Before you begin, ensure you have the following:
 
-1.  **AWS Account:** An active AWS account.
-2.  **AWS CLI:** Installed and configured with your credentials and default region.
-    *   Run `aws configure` if you haven't already.
-3.  **Terraform:** Installed on your local machine (version >= 1.3.0 recommended).
-4.  **Git:** Installed on your local machine.
+1. **AWS Account** – active and in good standing.  
+2. **AWS CLI** – installed & configured (`aws configure`).  
+3. **Terraform** ≥ v1.3 (v1.6+ recommended).  
+4. **Git** – installed locally.  
+5. **Validated ACM Certificate** – in the target region for the public **ALB → HTTPS** listener.  
 
 <br>
 
 
 ## Getting Started
 
-1.  **Clone the Repository:**
-    ```bash
-    git clone https://github.com/squatboy/terraform-3tier-architecture.git
-    cd terraform-3tier-architecture
-    ```
+1. **Clone the Repository**
+```bash
+git clone https://github.com/squatboy/terraform-3tier-architecture.git
+cd terraform-3tier-architecture
+```
 
-2.  **Configure Your Variables:**
-    This project uses a `terraform.tfvars` file to manage your specific configuration values.
-    *   Rename `terraform.tfvars.example` to `terraform.tfvars`:
-        ```bash
-        cp terraform.tfvars.example terraform.tfvars
-        ```
-    *   **Edit `terraform.tfvars`** and provide values for the variables. See the "Key User Inputs" section below for essential variables.
+2.	**Configure Your Variables**
+The project is driven by a terraform.tfvars file.
 
-3.  **Initialize Terraform:**
-    This command downloads the necessary provider plugins.
-    ```bash
-    terraform init
-    ```
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+Edit terraform.tfvars and supply values (see Key User Inputs).
 
-4.  **Plan Your Deployment:**
-    This command shows you what resources Terraform will create, modify, or destroy.
-    ```bash
-    terraform plan
-    ```
-    Review the plan carefully.
+3.	**Initialise Terraform**
+```bash
+terraform init
+```
 
-5.  **Apply Your Configuration:**
-    This command provisions the AWS resources.
-    ```bash
-    terraform apply
-    ```
-    Type `yes` when prompted to confirm.
+4.	**Review the Execution Plan**
+
+```bash
+terraform plan
+```
+
+5.	**Apply**
+
+```bash
+terraform apply
+```
+Type yes to deploy the full multi-AZ stack.
 
 <br>
 
 
-## Key User Inputs (Customize in `terraform.tfvars`)
+## Key User Inputs (edit in terraform.tfvars)
 
-You **must** or **should** customize the following variables in your `terraform.tfvars` file:
+| **Variable** | **Required?** | **Description / Example** |
+| --- | --- | --- |
+| aws_region | optional | "ap-northeast-2" |
+| project | optional | Prefix for resource names, e.g. "my3tier" |
+| domain_name | **required** | Public DNS zone, e.g. "example.com" |
+| acm_certificate_arn | **required** | ARN of an **ACM cert in the same region** (us-east-1 for CloudFront **not** valid here) |
+| key_name | **required** | EC2 key-pair name for SSH/SSM break-glass |
+| db_username | **required** | RDS master user |
+| db_password | **required & sensitive** | *Store in Secrets Manager or TF_VAR_* |
+| vpc_cidr, public_subnet_cidrs, app_subnet_cidrs, data_subnet_cidrs | optional | Custom CIDRs |
+| availability_zones | optional | ["ap-northeast-2a","ap-northeast-2c"] |
+| web_instance_type, app_instance_type | optional | t3.micro, t3.small, … |
+| db_instance_class, db_allocated_storage, … | optional | RDS sizing / engine |
 
-*   `aws_region`: (Optional, defaults to "ap-northeast-2") The AWS region where you want to deploy your infrastructure.
-    ```terraform
-    # aws_region = "us-east-1"
-    ```
-*   `project_name`: (Optional, defaults to "my3tier") A unique name for your project, used to prefix resource names. This helps in identifying resources and avoiding naming conflicts.
-    ```terraform
-    # project_name = "my-production-app"
-    ```
-*   `db_password`: **(Required and Sensitive)** The master password for your RDS database.
-    **Important:** Choose a strong, unique password. Do not commit this file with the actual password to a public repository if it's sensitive. Consider using environment variables or a secrets manager for production.
-    ```terraform
-    db_password = "YourSuperSecurePassword123!"
-    ```
-*   `ami_id_web`: (Optional) The AMI ID for your Web Tier EC2 instances. If left empty or commented out, the template will attempt to find the latest Amazon Linux 2 AMI for your selected region.
-    ```terraform
-    # ami_id_web = "ami-xxxxxxxxxxxxxxxxx"
-    ```
-*   `ami_id_app`: (Optional) The AMI ID for your Application Tier EC2 instances. If left empty or commented out, the template will attempt to find the latest Amazon Linux 2 AMI for your selected region.
-    ```terraform
-    # ami_id_app = "ami-xxxxxxxxxxxxxxxxx"
-    ```
-
-**Other common variables you might want to customize in `terraform.tfvars`:**
-
-*   `vpc_cidr`, `public_subnet_cidrs`, `private_subnet_cidrs`: For custom network addressing.
-*   `availability_zones`: To specify which AZs to use. Ensure the number of AZs matches the number of public/private subnets you intend to use per AZ.
-*   `web_instance_type`, `app_instance_type`: To change EC2 instance sizes.
-*   `db_instance_class`, `db_allocated_storage`, `db_engine`, `db_engine_version`, `db_name`, `db_username`: For RDS database configuration.
-
-Refer to `variables.tf` in the root directory and within each module for a full list of available input variables and their descriptions.
-
-<br>
-
+See variables.tf for a full catalogue.
 
 ## Outputs
-
-After a successful `terraform apply`, the following outputs will be displayed:
-
-*   `alb_dns_name`: The DNS name of the Application Load Balancer for accessing the Web Tier.
-*   `rds_endpoint`: The connection endpoint for the RDS database instance.
-*   `rds_port`: The port for the RDS database instance.
-*   `vpc_id`: The ID of the created VPC.
-*   And more...
-
-You can also view outputs at any time using:
-```bash
-terraform output
-```
+| **Output** | **Purpose** |
+| --- | --- |
+| alb_dns | Public DNS of the HTTPS Application Load Balancer |
+| redis_primary_endpoint | Redis (ElastiCache) primary endpoint |
+| rds_endpoint | RDS primary endpoint |
+| route53_zone_id | Hosted-zone ID for your domain |
+| vpc_id | VPC identifier |
+| many more… | view with terraform output |
 
 <br>
 
 
 ## Cleaning Up
 
-To destroy all resources created by this Terraform configuration:
-
+Destroy all resources:
 ```bash
 terraform destroy
 ```
-Type `yes` when prompted to confirm. **Be careful, as this will delete all managed infrastructure.**
+
+Type yes to confirm.
+
+> Warning : this removes the VPC, NAT Gateways, RDS, Redis, Route 53 records, etc.
 
 <br>
 
-
 ## Disclaimer
 
-This template is provided as a starting point. For production environments, consider additional security hardening, monitoring, logging, backup strategies, and cost optimization measures.
+This template is a reference architecture combining:
+-	Multi-AZ VPC (Public / App / Data subnets)
+-	Route 53 + AWS WAF v2 + ALB (TLS 1.2+)
+-	Web / App Auto Scaling Groups
+-	Per-AZ NAT Gateways (egress for patching, S3 log upload, external APIs)
+-	ElastiCache for Redis (primary+replica, automatic fail-over)
+-	RDS Multi-AZ (MySQL/PostgreSQL)
+-	VPC Gateway ⟶ S3 & DynamoDB, Interface Endpoints ⟶ SSM / CloudWatch
+
+Production hardening tasks still recommended:
+-	Remote state backend (S3 + DynamoDB lock)
+-	IAM least-privilege & CI/CD with tflint/tfsec
+-	WAF custom rules, Shield Advanced (if public-facing)
+-	ALB / WAF / Flow / RDS logs → S3 + Athena
+-	Backup, encryption & cost-optimisation strategies
+
+> Use at your own risk and adapt to organisational policies.
 
 ---
 
@@ -285,10 +274,10 @@ This template is provided as a starting point. For production environments, cons
 | 구성 요소                   | 설명                                                                                                          |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | **VPC 10.0.0.0/16**        | 모든 리소스를 포함하는 격리된 네트워크.                                                                      |
-| **서브넷**                 | *퍼블릭 :* 10.0.1.0/24, 10.0.10.0/24  •  *앱 프라이빗 :* 10.0.2.0/24, 10.0.11.0/24  •  *데이터 프라이빗 :* 10.0.3.0/24, 10.0.12.0/24 |
+| **서브넷**                 | *퍼블릭 :* 10.0.1.0/24, 10.0.10.0/24  -  *앱 프라이빗 :* 10.0.2.0/24, 10.0.11.0/24  -  *데이터 프라이빗 :* 10.0.3.0/24, 10.0.12.0/24 |
 | **Internet Gateway (IGW)** | 퍼블릭 서브넷 및 ALB의 인바운드/아웃바운드 인터넷 연결 지원.                                               |
 | **NAT Gateway × 2**        | 퍼블릭 서브넷마다 하나씩 구성되어 프라이빗 서브넷의 egress 트래픽을 담당. 단일 AZ 장애에 대한 복원력 제공. |
-| **라우트 테이블**          | • 퍼블릭 RT → IGW   • 프라이빗-앱 RT → AZ NATGW   • 프라이빗-데이터 RT (0.0.0.0/0 없음).                   |
+| **라우트 테이블**          | - 퍼블릭 RT → IGW   - 프라이빗-앱 RT → AZ NATGW   - 프라이빗-데이터 RT (0.0.0.0/0 없음).                   |
 | **보안 그룹**              | 최소 권한 원칙 적용 (ALB→Web, Web→App, App→Redis/RDS).                                                       |
 | **AWS VPC 엔드포인트 (선택사항)** | S3 및 DynamoDB용 게이트웨이 엔드포인트, SSM/CloudWatch용 인터페이스 엔드포인트로 NAT 트래픽 및 비용 절감. |
 | **CloudWatch / KMS / Kinesis** | 중앙화된 로깅, 지표, 경보 구성; 필요한 경우 CMK로 암호화.                                                  |
