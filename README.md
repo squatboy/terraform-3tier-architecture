@@ -1,67 +1,96 @@
 ## 🇰🇷 README [한국어 보기](#한국어)
 
+
 # Terraform AWS 3-Tier Architecture Template
 
 This repository provides a Terraform template to provision a common 3-Tier web architecture on AWS. It's designed to be a starting point for your own projects, allowing for quick setup and customization.
 
 ## Architecture Overview
 
+<img width="855" alt="image" src="https://github.com/user-attachments/assets/5afa9421-9899-400a-8604-749b509d9aca" />
+
+
 This Terraform project provisions the following 3-Tier architecture on AWS:
 
-```
-+-----------------------+       +---------------------------+       +-----------------------+
-|      Web Tier         |       |    Application Tier       |       |     Database Tier     |
-| (Presentation Layer)  |       |  (Business Logic Layer)   |       |      (Data Layer)     |
-+-----------------------+       +---------------------------+       +-----------------------+
-|                       |       |                           |       |                       |
-| - EC2 Instances       |       | - EC2 Instances           |       | - Amazon RDS          |
-|   (Nginx, Apache)     |       |   (Tomcat, Node.js, ...)  |       |   (MySQL, PostgreSQL) |
-| - Auto Scaling Group  |       | - Auto Scaling Group      |       |                       |
-| - Application Load    +------>|                           |<------+                       |
-|   Balancer (ALB)      |       |                           |       |                       |
-|                       |       |                           |       |                       |
-| **Public Subnets** |          | **Private Subnets**       |       | **Private Subnets**   |
-+-----------------------+       +---------------------------+       +-----------------------+
-           ^                                  ^                                 ^
-           |                                  |                                 |
-+-----------------------+       +----------------------------+       +-----------------------+
-|       Internet        |       |      Internal Network      |       |   Database Network    |
-+-----------------------+       +----------------------------+       +-----------------------+
-```
+### 1.  Web Tier — Presentation Layer  
+*Purpose :* Accepts user traffic, serves static assets, and proxies dynamic requests downstream.  
 
-The architecture consists of three main tiers:
+| AWS Service                    | Role                                                                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **Route 53**                   | Public‐facing DNS (`example.com → ALB`). Supports health checks & routing policies.            |
+| **AWS WAF v2**                 | Web-application firewall attached to the ALB (SQLi, XSS, bot, rate-limit rules).               |
+| **Application Load Balancer**  | TLS termination & cross-zone load balancing across both AZs.                                   |
+| **EC2 instances (Nginx / Apache)** | Serve static content & act as reverse proxies.                                               |
+| **Auto Scaling Group**         | Elastically scales web servers in *public subnets* of **AZ-a** and **AZ-b**.                   |
 
-1.  **Web Tier (Presentation Layer):**
-    *   **Purpose:** Handles incoming user requests and serves static content. Forwards dynamic requests to the Application Tier.
-    *   **AWS Services:**
-        *   **EC2 Instances:** Run web servers (e.g., Nginx, Apache).
-        *   **Auto Scaling Group (ASG):** Ensures high availability and scalability for web servers.
-        *   **Application Load Balancer (ALB):** Distributes incoming HTTP/HTTPS traffic across web server instances.
-    *   **Network:** Deployed in **Public Subnets** to be accessible from the internet.
+> **Network :** Hosted in **Public Subnets** (10.0.1.0/24, 10.0.10.0/24) with inbound 80/443 from the ALB only.
 
-2.  **Application Tier (Business Logic Layer):**
-    *   **Purpose:** Processes business logic, interacts with the Database Tier, and handles dynamic content generation.
-    *   **AWS Services:**
-        *   **EC2 Instances:** Run application servers (e.g., Tomcat, Node.js, Python/Django).
-        *   **Auto Scaling Group (ASG):** Provides scalability and resilience for application servers.
-    *   **Network:** Deployed in **Private Subnets** for enhanced security, accessible only from the Web Tier or other internal resources.
 
-3.  **Database Tier (Data Layer):**
-    *   **Purpose:** Stores and manages application data.
-    *   **AWS Services:**
-        *   **Amazon RDS (Relational Database Service):** Provides a managed relational database (e.g., MySQL, PostgreSQL).
-    *   **Network:** Deployed in separate **Private Subnets**, accessible only from the Application Tier.
+### 2.  Application Tier — Business-Logic Layer  
+*Purpose :* Executes core logic, calls external APIs, writes/reads cache and DB.  
 
-**Core Networking & Security Components:**
+| AWS Service                    | Role                                                                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **EC2 instances (Node.js / Tomcat / …)** | Runs application containers or processes.                                               |
+| **Auto Scaling Group**         | Spans both AZs for HA.                                                                         |
+| **NAT Gateway × 2**            | One per AZ; enables outbound traffic (OS patching, S3 log uploads, external API calls).        |
 
-*   **VPC (Virtual Private Cloud):** An isolated network environment for your resources.
-*   **Subnets:**
-    *   **Public Subnets:** Have a route to the Internet Gateway, used for resources like ALBs and bastion hosts.
-    *   **Private Subnets:** Do not have a direct route to the internet. Outbound internet access is provided via a NAT Gateway for tasks like software updates.
-*   **Internet Gateway (IGW):** Enables communication between your VPC and the internet.
-*   **NAT Gateway:** Allows instances in private subnets to initiate outbound traffic to the internet while preventing inbound traffic.
-*   **Route Tables:** Control the flow of traffic within your VPC.
-*   **Security Groups:** Act as virtual firewalls for your instances, controlling inbound and outbound traffic at the instance level.
+> **Network :** Deployed in **Private Subnets** (10.0.2.0/24, 10.0.11.0/24). Default route → AZ-local NAT GW.
+
+
+### 3.  Cache Tier — In-Memory Data Layer  
+*Purpose :* Reduce latency and offload repetitive reads/writes from the database.  
+
+| AWS Service                    | Role                                                                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **ElastiCache for Redis**      | Multi-AZ replication group – Primary in AZ-a, Replica in AZ-b with automatic fail-over.        |
+
+> **Network :** Same private subnets as the Application Tier; only App-SG allowed on port 6379.
+
+
+### 4.  Database Tier — Persistent Data Layer  
+*Purpose :* Durable storage for relational data.  
+
+| AWS Service                    | Role                                                                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| **Amazon RDS (MySQL / PostgreSQL)** | Multi-AZ deployment – Primary in AZ-a, synchronous Standby in AZ-b. Automatic fail-over. |
+
+> **Network :** Dedicated **Data Subnets** (10.0.3.0/24, 10.0.12.0/24) without internet route.
+
+
+### Core Networking & Security Components
+
+| Component                | Description                                                                                                            |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| **VPC 10.0.0.0/16**      | Isolated network containing all resources.                                                                             |
+| **Subnets**              | *Public :* 10.0.1.0/24, 10.0.10.0/24  •  *App Private :* 10.0.2.0/24, 10.0.11.0/24  •  *Data Private :* 10.0.3.0/24, 10.0.12.0/24 |
+| **Internet Gateway (IGW)** | Enables inbound/outbound internet for public subnets & ALB.                                                          |
+| **NAT Gateway × 2**       | Placed in each public subnet for egress from private subnets; resilient to single-AZ failure.                         |
+| **Route Tables**          | • Public RT → IGW   • Private-App RT → AZ NATGW   • Private-Data RT (no 0.0.0.0/0).                                    |
+| **Security Groups**       | Principle of least privilege (ALB→Web, Web→App, App→Redis/RDS).                                                       |
+| **AWS VPC Endpoints (Optional)** | S3 & DynamoDB Gateway endpoints, Interface endpoints for SSM/CloudWatch to reduce NAT traffic & cost.           |
+| **CloudWatch / KMS / Kinesis** | Centralised logging, metrics, alarms; encrypted with CMK where applicable.                                       |
+
+
+### Traffic Flow (high-level)
+
+1. **Client → Route 53** → resolves DNS to ALB.  
+2. **Client → ALB** (TLS) → **AWS WAF** inspects request.  
+3. ALB forwards to **Web EC2** in the least-loaded AZ.  
+4. Web server proxies to **App EC2** via private ALB target group.  
+5. App checks **Redis**; on miss, queries **RDS**, then caches result.  
+6. Any outbound call (patch, external API, S3 log upload) exits via the AZ-local **NAT Gateway**.  
+7. Response propagates back up to the client.
+
+---
+
+### High-Availability & Resilience Highlights
+
+* **Multi-AZ** Web/App instances, Redis replication, RDS synchronous standby.  
+* **Cross-zone ALB** ensures traffic distribution even if one AZ is impaired.  
+* **Per-AZ NAT Gateways** eliminate single points of failure for egress.  
+* **AWS WAF + SGs** provide layered security per AWS Well-Architected best practices.
+
 
 <br>
 
@@ -205,61 +234,85 @@ This template is provided as a starting point. For production environments, cons
 
 이 Terraform 프로젝트는 AWS 상에 다음과 같은 3티어 아키텍처를 프로비저닝합니다:
 
-```
-+-----------------------+       +---------------------------+       +-----------------------+
-|      Web Tier         |       |    Application Tier       |       |     Database Tier     |
-| (Presentation Layer)  |       |  (Business Logic Layer)   |       |      (Data Layer)     |
-+-----------------------+       +---------------------------+       +-----------------------+
-|                       |       |                           |       |                       |
-| - EC2 Instances       |       | - EC2 Instances           |       | - Amazon RDS          |
-|   (Nginx, Apache)     |       |   (Tomcat, Node.js, ...)  |       |   (MySQL, PostgreSQL) |
-| - Auto Scaling Group  |       | - Auto Scaling Group      |       |                       |
-| - Application Load    +------>|                           |<------+                       |
-|   Balancer (ALB)      |       |                           |       |                       |
-|                       |       |                           |       |                       |
-| **Public Subnets** |          | **Private Subnets**       |       | **Private Subnets**   |
-+-----------------------+       +---------------------------+       +-----------------------+
-           ^                                  ^                                 ^
-           |                                  |                                 |
-+-----------------------+       +----------------------------+       +-----------------------+
-|       Internet        |       |      Internal Network      |       |   Database Network    |
-+-----------------------+       +----------------------------+       +-----------------------+
-```
+### 1.  웹 계층 — 표현 계층  
+*목적 :* 사용자 트래픽을 수신하고, 정적 자산을 제공하며, 동적 요청을 하위 계층으로 프록시합니다.  
 
-이 아키텍처는 세 가지 주요 계층으로 구성됩니다:
+| AWS 서비스                    | 역할                                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| **Route 53**                 | 퍼블릭 DNS (`example.com → ALB`). 상태 확인 및 라우팅 정책 지원.                               |
+| **AWS WAF v2**               | ALB에 연결된 웹 애플리케이션 방화벽 (SQLi, XSS, 봇 차단, 속도 제한 규칙 등).                     |
+| **Application Load Balancer**| TLS 종료 및 가용 영역 간 로드 밸런싱 수행.                                                       |
+| **EC2 인스턴스 (Nginx / Apache)** | 정적 콘텐츠 제공 및 리버스 프록시 역할 수행.                                                |
+| **Auto Scaling Group**       | **AZ-a**, **AZ-b**의 *퍼블릭 서브넷*에서 웹 서버를 탄력적으로 확장.                            |
 
-1.  **웹 계층 (프레젠테이션 계층):**
-    *   **목적:** 사용자의 요청을 받아 처리하고 정적 콘텐츠를 제공합니다. 동적 요청은 애플리케이션 계층으로 전달합니다.
-    *   **AWS 서비스:**
-        *   **EC2 인스턴스:** 웹 서버(예: Nginx, Apache)를 실행합니다.
-        *   **Auto Scaling Group (ASG):** 웹 서버의 고가용성 및 확장성을 보장합니다.
-        *   **Application Load Balancer (ALB):** 웹 서버 인스턴스 간에 들어오는 HTTP/HTTPS 트래픽을 분산합니다.
-    *   **네트워크:** 인터넷에서 접근 가능하도록 **퍼블릭 서브넷(Public Subnets)** 에 배포됩니다.
+> **네트워크 :** **퍼블릭 서브넷** (10.0.1.0/24, 10.0.10.0/24) 내에 위치하며, ALB로부터의 80/443 포트 인바운드만 허용.
 
-2.  **애플리케이션 계층 (비즈니스 로직 계층):**
-    *   **목적:** 비즈니스 로직을 처리하고, 데이터베이스 계층과 상호 작용하며, 동적 콘텐츠 생성을 담당합니다.
-    *   **AWS 서비스:**
-        *   **EC2 인스턴스:** 애플리케이션 서버(예: Tomcat, Node.js, Python/Django)를 실행합니다.
-        *   **Auto Scaling Group (ASG):** 애플리케이션 서버의 확장성 및 복원력을 제공합니다.
-    *   **네트워크:** 보안 강화를 위해 **프라이빗 서브넷(Private Subnets)** 에 배포되며, 웹 계층이나 다른 내부 리소스에서만 접근 가능합니다.
 
-3.  **데이터베이스 계층 (데이터 계층):**
-    *   **목적:** 애플리케이션 데이터를 저장하고 관리합니다.
-    *   **AWS 서비스:**
-        *   **Amazon RDS (Relational Database Service):** 관리형 관계형 데이터베이스(예: MySQL, PostgreSQL)를 제공합니다.
-    *   **네트워크:** 별도의 **프라이빗 서브넷(Private Subnets)** 에 배포되며, 애플리케이션 계층에서만 접근 가능합니다.
+### 2.  애플리케이션 계층 — 비즈니스 로직 계층  
+*목적 :* 핵심 비즈니스 로직 실행, 외부 API 호출, 캐시 및 DB 읽기/쓰기 처리.  
 
-**핵심 네트워킹 및 보안 구성 요소:**
+| AWS 서비스                          | 역할                                                                                             |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| **EC2 인스턴스 (Node.js / Tomcat / …)** | 애플리케이션 컨테이너 또는 프로세스를 실행.                                                  |
+| **Auto Scaling Group**             | 고가용성을 위해 두 개의 AZ에 걸쳐 구성.                                                        |
+| **NAT Gateway × 2**                | 가용영역별 1개씩 구성; 아웃바운드 트래픽 (OS 패치, S3 로그 업로드, 외부 API 호출 등)을 허용.    |
 
-*   **VPC (Virtual Private Cloud):** 사용자의 리소스를 위한 격리된 네트워크 환경입니다.
-*   **서브넷(Subnets):**
-    *   **퍼블릭 서브넷:** 인터넷 게이트웨이로 라우팅 경로가 있어 ALB나 배스천 호스트와 같은 리소스에 사용됩니다.
-    *   **프라이빗 서브넷:** 인터넷으로 직접 라우팅 경로가 없습니다. 외부 인터넷으로의 아웃바운드 접근은 소프트웨어 업데이트 등의 작업을 위해 NAT 게이트웨이를 통해 제공됩니다.
-*   **인터넷 게이트웨이 (IGW):** VPC와 인터넷 간의 통신을 가능하게 합니다.
-*   **NAT 게이트웨이:** 프라이빗 서브넷의 인스턴스가 외부 인터넷으로 아웃바운드 트래픽을 시작할 수 있도록 허용하며, 외부에서의 인바운드 트래픽은 차단합니다.
-*   **라우팅 테이블(Route Tables):** VPC 내의 트래픽 흐름을 제어합니다.
-*   **보안 그룹(Security Groups):** 인스턴스 수준에서 작동하는 가상 방화벽으로, 인스턴스로 들어오고 나가는 트래픽을 제어합니다.
+> **네트워크 :** **프라이빗 서브넷** (10.0.2.0/24, 10.0.11.0/24)에 배포. 기본 라우트는 AZ 로컬 NAT GW로 설정.
 
+
+### 3.  캐시 계층 — 인메모리 데이터 계층  
+*목적 :* 지연시간을 줄이고 데이터베이스의 반복적인 읽기/쓰기를 오프로드.  
+
+| AWS 서비스                 | 역할                                                                                                 |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **ElastiCache for Redis**  | 다중 AZ 복제 그룹 – 기본 노드는 AZ-a, 복제 노드는 AZ-b. 자동 장애 조치 지원.                        |
+
+> **네트워크 :** 애플리케이션 계층과 동일한 프라이빗 서브넷 내에 위치. 포트 6379은 App-SG만 허용.
+
+
+### 4.  데이터베이스 계층 — 영속적 데이터 계층  
+*목적 :* 관계형 데이터를 위한 영속적인 저장소.  
+
+| AWS 서비스                         | 역할                                                                                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Amazon RDS (MySQL / PostgreSQL)** | 다중 AZ 배포 – 기본 인스턴스는 AZ-a, 동기식 스탠바이 인스턴스는 AZ-b에 존재. 자동 장애 조치 지원.     |
+
+> **네트워크 :** **데이터 전용 서브넷** (10.0.3.0/24, 10.0.12.0/24)에 위치. 인터넷 경로는 없음.
+
+
+### 핵심 네트워킹 및 보안 구성 요소
+
+| 구성 요소                   | 설명                                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **VPC 10.0.0.0/16**        | 모든 리소스를 포함하는 격리된 네트워크.                                                                      |
+| **서브넷**                 | *퍼블릭 :* 10.0.1.0/24, 10.0.10.0/24  •  *앱 프라이빗 :* 10.0.2.0/24, 10.0.11.0/24  •  *데이터 프라이빗 :* 10.0.3.0/24, 10.0.12.0/24 |
+| **Internet Gateway (IGW)** | 퍼블릭 서브넷 및 ALB의 인바운드/아웃바운드 인터넷 연결 지원.                                               |
+| **NAT Gateway × 2**        | 퍼블릭 서브넷마다 하나씩 구성되어 프라이빗 서브넷의 egress 트래픽을 담당. 단일 AZ 장애에 대한 복원력 제공. |
+| **라우트 테이블**          | • 퍼블릭 RT → IGW   • 프라이빗-앱 RT → AZ NATGW   • 프라이빗-데이터 RT (0.0.0.0/0 없음).                   |
+| **보안 그룹**              | 최소 권한 원칙 적용 (ALB→Web, Web→App, App→Redis/RDS).                                                       |
+| **AWS VPC 엔드포인트 (선택사항)** | S3 및 DynamoDB용 게이트웨이 엔드포인트, SSM/CloudWatch용 인터페이스 엔드포인트로 NAT 트래픽 및 비용 절감. |
+| **CloudWatch / KMS / Kinesis** | 중앙화된 로깅, 지표, 경보 구성; 필요한 경우 CMK로 암호화.                                                  |
+
+
+### 트래픽 흐름 (상위 레벨)
+
+1. **클라이언트 → Route 53** → DNS를 ALB로 해석.  
+2. **클라이언트 → ALB** (TLS) → **AWS WAF**가 요청 검사.  
+3. ALB는 **가장 적재가 적은 AZ**의 웹 EC2로 요청 전달.  
+4. 웹 서버는 **프라이빗 ALB 대상 그룹**을 통해 App EC2로 프록시 처리.  
+5. 애플리케이션은 먼저 **Redis**를 확인하고, 미스 발생 시 **RDS**를 조회한 뒤 결과를 캐시.  
+6. 아웃바운드 트래픽 (패치, 외부 API, S3 로그 업로드 등)은 해당 AZ의 **NAT Gateway**를 통해 나감.  
+7. 응답은 클라이언트로 역방향 전파됨.
+
+---
+
+### 고가용성 및 복원력 하이라이트
+
+* **다중 AZ** 웹/앱 인스턴스, Redis 복제, RDS 동기식 스탠바이 구성.  
+* **크로스존 ALB**로 AZ 장애 시에도 트래픽 분산 보장.  
+* **AZ별 NAT 게이트웨이**로 egress 단일 장애 지점 제거.  
+* **AWS WAF + 보안 그룹**을 통한 AWS Well-Architected 보안 모범 사례 준수.
+  
 <br>
 
 
