@@ -103,35 +103,6 @@ Before you begin, ensure you have the following:
 4. **Git** – installed locally.  
 5. **Validated ACM Certificate** – in the target region for the public **ALB → HTTPS** listener.  
 
-<br>
-
-
-## Getting Started
-
-1. **Clone the Repository**
-```bash
-git clone https://github.com/squatboy/terraform-3tier-architecture.git
-cd terraform-3tier-architecture
-```
-
-
-2.	**Initialise Terraform**
-```bash
-terraform init
-```
-
-3.	**Review the Execution Plan**
-
-```bash
-terraform plan
-```
-
-4.	**Apply**
-
-```bash
-terraform apply
-```
-Type yes to deploy the full multi-AZ stack.
 
 <br>
 
@@ -306,42 +277,6 @@ Production hardening tasks still recommended:
 3. **Terraform** ≥ v1.3 (v1.6 이상 권장).
 4. **Git** – 로컬에 설치.
 5. **검증된 ACM 인증서** – 대상 리전에 있어야 하며, 퍼블릭 **ALB → HTTPS** 리스너에 사용됩니다.
-
-<br>
-
-## 시작하기
-
-1. **리포지토리 클론**
-```bash
-git clone https://github.com/squatboy/terraform-3tier-architecture.git
-cd terraform-3tier-architecture
-````
-
-2.  **Terraform 초기화**
-
-<!-- end list -->
-
-```bash
-terraform init
-```
-
-3.  **실행 계획 검토**
-
-<!-- end list -->
-
-```bash
-terraform plan
-```
-
-4.  **적용**
-
-
-
-```bash
-terraform apply
-```
-
-yes를 입력하여 전체 다중 AZ 스택을 배포하십시오.
 
 
 <br>
