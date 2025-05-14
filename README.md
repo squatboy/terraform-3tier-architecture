@@ -304,125 +304,131 @@ Production hardening tasks still recommended:
   
 <br>
 
-
 ## 사전 준비 사항
 
-시작하기 전에 다음 사항을 준비해야 합니다:
+시작하기 전에 다음 사항이 준비되어 있는지 확인하십시오:
 
-1.  **AWS 계정:** 활성화된 AWS 계정.
-2.  **AWS CLI:** 로컬 머신에 설치 및 자격 증명(credentials), 기본 리전(region)으로 구성되어 있어야 합니다.
-    *   아직 구성하지 않았다면 `aws configure` 명령을 실행.
-3.  **Terraform:** 로컬 머신에 설치되어 있어야 합니다 (버전 >= 1.3.0 권장).
-4.  **Git:** 로컬 머신에 설치되어 있어야 합니다.
+1. **AWS 계정** – 활성화되어 있고 정상적인 상태여야 합니다.
+2. **AWS CLI** – 설치 및 구성 완료 (`aws configure`).
+3. **Terraform** ≥ v1.3 (v1.6 이상 권장).
+4. **Git** – 로컬에 설치.
+5. **검증된 ACM 인증서** – 대상 리전에 있어야 하며, 퍼블릭 **ALB → HTTPS** 리스너에 사용됩니다.
 
 <br>
-
 
 ## 시작하기
 
-1.  **저장소 복제하기:**
-    ```bash
-    git clone https://github.com/squatboy/terraform-3tier-architecture.git
-    cd terraform-3tier-architecture
-    ```
-
-2.  **변수 설정하기:**
-    이 프로젝트는 `terraform.tfvars` 파일을 사용하여 특정 구성 값을 관리합니다.
-    *   `terraform.tfvars.example` 파일의 이름을 `terraform.tfvars`로 변경합니다:
-        ```bash
-        cp terraform.tfvars.example terraform.tfvars
-        ```
-    *   **`terraform.tfvars` 파일 수정:** 필요한 변수 값을 입력합니다. 필수 변수에 대한 자세한 내용은 아래 "주요 사용자 입력값" 섹션을 참조.
-
-3.  **Terraform 초기화:**
-    이 명령은 필요한 프로바이더 플러그인을 다운로드합니다.
-    ```bash
-    terraform init
-    ```
-
-4.  **배포 계획 검토:**
-    이 명령은 Terraform이 생성, 수정 또는 삭제할 리소스를 보여줍니다.
-    ```bash
-    terraform plan
-    ```
-
-5.  **구성 적용하기:**
-    이 명령은 AWS 리소스를 프로비저닝합니다.
-    ```bash
-    terraform apply
-    ```
-    확인 메시지가 나타나면 `yes`를 입력
-
-<br>
-
-
-## 주요 사용자 입력값 (`terraform.tfvars`에서 사용자 정의)
-
-`terraform.tfvars` 파일에서 다음 변수들을 **반드시** 또는 **필요에 따라** 사용자 정의해야 합니다:
-
-*   `aws_region`: (선택 사항, 기본값: "ap-northeast-2") 인프라를 배포할 AWS 리전입니다.
-    ```terraform
-    # aws_region = "us-east-1"
-    ```
-*   `project_name`: (선택 사항, 기본값: "my3tier") 프로젝트의 고유 이름으로, 리소스 이름의 접두사로 사용됩니다. 리소스를 식별하고 이름 충돌을 방지하는 데 도움이 됩니다.
-    ```terraform
-    # project_name = "내-프로덕션-앱"
-    ```
-*   `db_password`: **(필수 및 민감 정보)** RDS 데이터베이스의 마스터 비밀번호입니다.
-    **중요:** 강력하고 고유한 비밀번호를 선택하세요! 민감한 정보가 포함된 경우, 이 파일을 실제 비밀번호와 함께 공개 저장소에 커밋하지 마세요. 프로덕션 환경에서는 환경 변수나 시크릿 매니저 사용을 고려하세요!.
-    ```terraform
-    db_password = "매우안전한나만의비밀번호123!"
-    ```
-*   `ami_id_web`: (선택 사항) 웹 계층 EC2 인스턴스를 위한 AMI ID입니다. 비워두거나 주석 처리하면, 템플릿은 선택한 리전의 최신 Amazon Linux 2 AMI를 자동으로 찾으려고 시도합니다.
-    ```terraform
-    # ami_id_web = "ami-xxxxxxxxxxxxxxxxx"
-    ```
-*   `ami_id_app`: (선택 사항) 애플리케이션 계층 EC2 인스턴스를 위한 AMI ID입니다. 비워두거나 주석 처리하면, 템플릿은 선택한 리전의 최신 Amazon Linux 2 AMI를 자동으로 찾으려고 시도합니다.
-    ```terraform
-    # ami_id_app = "ami-xxxxxxxxxxxxxxxxx"
-    ```
-
-**`terraform.tfvars`에서 사용자 정의할 수 있는 그 외 일반적인 변수들:**
-
-*   `vpc_cidr`, `public_subnet_cidrs`, `private_subnet_cidrs`: 사용자 정의 네트워크 주소 설정을 위함.
-*   `availability_zones`: 사용할 가용 영역(AZ)을 지정하기 위함. AZ의 수는 AZ당 사용하려는 퍼블릭/프라이빗 서브넷 수와 일치해야 합니다.
-*   `web_instance_type`, `app_instance_type`: EC2 인스턴스 크기를 변경하기 위함.
-*   `db_instance_class`, `db_allocated_storage`, `db_engine`, `db_engine_version`, `db_name`, `db_username`: RDS 데이터베이스 구성을 위함.
-
-사용 가능한 모든 입력 변수와 설명은 루트 디렉토리 및 각 모듈 내의 `variables.tf` 파일을 참조
-
-<br>
-
-
-## 출력값
-
-`terraform apply`가 성공적으로 실행된 후 다음 출력값이 표시됩니다:
-
-*   `alb_dns_name`: 웹 계층에 접근하기 위한 Application Load Balancer의 DNS 이름.
-*   `rds_endpoint`: RDS 데이터베이스 인스턴스의 연결 엔드포인트.
-*   `rds_port`: RDS 데이터베이스 인스턴스의 포트.
-*   `vpc_id`: 생성된 VPC의 ID.
-*   그 외 다수...
-
-다음 명령어를 사용하여 언제든지 출력값을 확인할 수 있습니다:
+1. **리포지토리 클론**
 ```bash
-terraform output
+git clone https://github.com/squatboy/terraform-3tier-architecture.git
+cd terraform-3tier-architecture
+````
+
+2.  **변수 구성**
+    이 프로젝트는 terraform.tfvars 파일을 기반으로 작동합니다.
+
+<!-- end list -->
+
+```bash
+cp terraform.tfvars.example terraform.tfvars
 ```
 
+terraform.tfvars 파일을 편집하고 값을 입력하십시오 (주요 사용자 입력 항목 참조).
+
+3.  **Terraform 초기화**
+
+<!-- end list -->
+
+```bash
+terraform init
+```
+
+4.  **실행 계획 검토**
+
+<!-- end list -->
+
+```bash
+terraform plan
+```
+
+5.  **적용**
+
+
+
+```bash
+terraform apply
+```
+
+yes를 입력하여 전체 다중 AZ 스택을 배포하십시오.
+
+
 <br>
 
+## 주요 사용자 입력 항목 (terraform.tfvars 파일 편집)
 
-## 리소스 정리하기
+| **변수** | **필수 여부?** | **설명 / 예시** |
+| --- | --- | --- |
+| aws\_region | 선택 사항 | "ap-northeast-2" |
+| project | 선택 사항 | 리소스 이름의 접두사, 예: "my3tier" |
+| domain\_name | **필수** | 퍼블릭 DNS 존, 예: "example.com" |
+| acm\_certificate\_arn | **필수** | **동일 리전에 있는 ACM 인증서의 ARN** (CloudFront용 us-east-1 인증서는 여기서 유효하지 않습니다) |
+| key\_name | **필수** | SSH/SSM 긴급 접근을 위한 EC2 키 페어 이름 |
+| db\_username | **필수** | RDS 마스터 사용자 이름 |
+| db\_password | **필수 & 민감**| *Secrets Manager 또는 TF\_VAR\_에 저장* |
+| vpc\_cidr, public\_subnet\_cidrs, app\_subnet\_cidrs, data\_subnet\_cidrs | 선택 사항 | 사용자 지정 CIDR |
+| availability\_zones | 선택 사항 | ["ap-northeast-2a","ap-northeast-2c"] |
+| web\_instance\_type, app\_instance\_type | 선택 사항 | t3.micro, t3.small, … |
+| db\_instance\_class, db\_allocated\_storage, … | 선택 사항 | RDS 크기 조정 / 엔진 |
 
-이 Terraform 구성으로 생성된 모든 리소스를 삭제하려면 다음 명령을 실행:
+전체 목록은 variables.tf를 참조하십시오.
+
+## 출력 항목
+
+| **출력 항목** | **용도** |
+| --- | --- |
+| alb\_dns | HTTPS Application Load Balancer의 퍼블릭 DNS |
+| redis\_primary\_endpoint | Redis (ElastiCache) 주 엔드포인트 |
+| rds\_endpoint | RDS 주 엔드포인트 |
+| route53\_zone\_id | 도메인의 호스팅 존 ID |
+| vpc\_id | VPC 식별자 |
+| many more… | terraform output으로 확인 가능 |
+
+
+
+## 정리하기
+
+모든 리소스 삭제:
 
 ```bash
 terraform destroy
 ```
-확인 메시지가 나타나면 `yes`를 입력. **주의: 이 작업은 관리되는 모든 인프라를 삭제합니다.**
+
+확인을 위해 yes를 입력하십시오.
+
+> 경고 : 이 작업은 VPC, NAT Gateway, RDS, Redis, Route 53 레코드 등을 제거합니다.
+
 
 ## 면책 조항
 
-이 템플릿은 시작점으로 제공됩니다. 프로덕션 환경에서는 추가적인 보안 강화, 모니터링, 로깅, 백업 전략 및 비용 최적화 방안을 고려하세요!
+이 템플릿은 다음을 결합한 참조 아키텍처입니다:
+
+  - 다중 AZ VPC (Public / App / Data 서브넷)
+  - Route 53 + AWS WAF v2 + ALB (TLS 1.2 이상)
+  - 웹 / 앱 Auto Scaling Group
+  - AZ별 NAT Gateway (패치, S3 로그 업로드, 외부 API를 위한 이그레스)
+  - Redis용 ElastiCache (기본 + 복제본, 자동 장애 조치)
+  - RDS 다중 AZ (MySQL/PostgreSQL)
+  - VPC Gateway ⟶ S3 & DynamoDB, Interface Endpoints ⟶ SSM / CloudWatch
+
+프로덕션 환경 강화를 위해 권장되는 추가 작업:
+
+  - 원격 상태 백엔드 (S3 + DynamoDB 잠금)
+  - IAM 최소 권한 & tflint/tfsec을 사용한 CI/CD
+  - WAF 사용자 지정 규칙, Shield Advanced (퍼블릭 노출 시)
+  - ALB / WAF / Flow / RDS 로그 → S3 + Athena
+  - 백업, 암호화 및 비용 최적화 전략
+
+> 자신의 책임 하에 사용하고 조직 정책에 맞게 조정하십시오.
+
 
 ---
