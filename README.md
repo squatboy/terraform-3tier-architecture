@@ -77,7 +77,7 @@ This Terraform project provisions the following 3-Tier architecture on AWS:
 1. **Client → Route 53** → resolves DNS to ALB.  
 2. **Client → ALB** (TLS) → **AWS WAF** inspects request.  
 3. ALB forwards to **Web EC2** in the least-loaded AZ.  
-4. Web server proxies to **App EC2** via private ALB target group.  
+4. Web server proxies to **App EC2**  via private network.
 5. App checks **Redis**; on miss, queries **RDS**, then caches result.  
 6. Any outbound call (patch, external API, S3 log upload) exits via the AZ-local **NAT Gateway**.  
 7. Response propagates back up to the client.
@@ -114,26 +114,19 @@ git clone https://github.com/squatboy/terraform-3tier-architecture.git
 cd terraform-3tier-architecture
 ```
 
-2.	**Configure Your Variables**
-The project is driven by a terraform.tfvars file.
 
-```bash
-cp terraform.tfvars.example terraform.tfvars
-```
-Edit terraform.tfvars and supply values (see Key User Inputs).
-
-3.	**Initialise Terraform**
+2.	**Initialise Terraform**
 ```bash
 terraform init
 ```
 
-4.	**Review the Execution Plan**
+3.	**Review the Execution Plan**
 
 ```bash
 terraform plan
 ```
 
-5.	**Apply**
+4.	**Apply**
 
 ```bash
 terraform apply
@@ -324,18 +317,7 @@ git clone https://github.com/squatboy/terraform-3tier-architecture.git
 cd terraform-3tier-architecture
 ````
 
-2.  **변수 구성**
-    이 프로젝트는 terraform.tfvars 파일을 기반으로 작동합니다.
-
-<!-- end list -->
-
-```bash
-cp terraform.tfvars.example terraform.tfvars
-```
-
-terraform.tfvars 파일을 편집하고 값을 입력하십시오 (주요 사용자 입력 항목 참조).
-
-3.  **Terraform 초기화**
+2.  **Terraform 초기화**
 
 <!-- end list -->
 
@@ -343,7 +325,7 @@ terraform.tfvars 파일을 편집하고 값을 입력하십시오 (주요 사용
 terraform init
 ```
 
-4.  **실행 계획 검토**
+3.  **실행 계획 검토**
 
 <!-- end list -->
 
@@ -351,7 +333,7 @@ terraform init
 terraform plan
 ```
 
-5.  **적용**
+4.  **적용**
 
 
 
