@@ -69,8 +69,6 @@ This Terraform project provisions the following 3-Tier architecture on AWS:
 | **Route Tables**          | - Public RT → IGW   - Private-App RT → AZ NATGW   - Private-Data RT (no 0.0.0.0/0).                                    |
 | **Security Groups**       | Principle of least privilege (ALB→Web, Web→App, App→Redis/RDS).                                                       |
 | **AWS VPC Endpoints (Optional)** | S3 & DynamoDB Gateway endpoints, Interface endpoints for SSM/CloudWatch to reduce NAT traffic & cost.           |
-| **CloudWatch / KMS / Kinesis** | Centralised logging, metrics, alarms; encrypted with CMK where applicable.                                       |
-
 
 ### Traffic Flow (high-level)
 
@@ -244,7 +242,7 @@ Production hardening tasks still recommended:
 | **라우트 테이블**          | - 퍼블릭 RT → IGW   - 프라이빗-앱 RT → AZ NATGW   - 프라이빗-데이터 RT (0.0.0.0/0 없음).                   |
 | **보안 그룹**              | 최소 권한 원칙 적용 (ALB→Web, Web→App, App→Redis/RDS).                                                       |
 | **AWS VPC 엔드포인트 (선택사항)** | S3 및 DynamoDB용 게이트웨이 엔드포인트, SSM/CloudWatch용 인터페이스 엔드포인트로 NAT 트래픽 및 비용 절감. |
-| **CloudWatch / KMS / Kinesis** | 중앙화된 로깅, 지표, 경보 구성; 필요한 경우 CMK로 암호화.                                                  |
+
 
 
 ### 트래픽 흐름 (상위 레벨)
