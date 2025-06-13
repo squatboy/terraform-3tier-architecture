@@ -7,137 +7,141 @@ This repository provides a Terraform template to provision a common 3-Tier web a
 
 ## Architecture Overview
 
-<img width="855" alt="image" src="https://github.com/user-attachments/assets/5afa9421-9899-400a-8604-749b509d9aca" />
+<img width="726" alt="image" src="https://github.com/user-attachments/assets/776f9507-a57e-4b97-a592-b31f0b60c019" />
 
+This Terraform project provisions the following up-to-date 3-Tier web application architecture on AWS.
 
-This Terraform project provisions the following 3-Tier architecture on AWS:
+---
 
-### 1.  Web Tier — Presentation Layer  
-*Purpose :* Accepts user traffic, serves static assets, and proxies dynamic requests downstream.  
+## 1. Web Tier — Global Presentation Layer  
+**Purpose:** Deliver static and dynamic content to global users with minimal latency  
 
-| AWS Service                    | Role                                                                                           |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| **Route 53**                   | Public‐facing DNS (`example.com → ALB`). Supports health checks & routing policies.            |
-| **AWS WAF v2**                 | Web-application firewall attached to the ALB (SQLi, XSS, bot, rate-limit rules).               |
-| **Application Load Balancer**  | TLS termination & cross-zone load balancing across both AZs.                                   |
-| **EC2 instances (Nginx / Apache)** | Serve static content & act as reverse proxies.                                               |
-| **Auto Scaling Group**         | Elastically scales web servers in *public subnets* of **AZ-a** and **AZ-b**.                   |
+| AWS Service                  | Role                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| **Route 53**                 | Public DNS (e.g. `example.com`) → CloudFront. Global DNS routing and health checks.        |
+| **AWS WAF**                  | Web Application Firewall in front of CloudFront (blocks SQLi, XSS, bots, rate limits).     |
+| **Amazon CloudFront**        | Accelerates static & dynamic content via global edge locations<br>Origins: S3 and ALB (HTTPS). |
+| **AWS Certificate Manager**  | Automatically provisions and renews TLS certificates for CloudFront and ALB.               |
+| **Amazon S3**                | Hosts static assets (HTML, CSS, JavaScript, images).                                       |
+| **Application Load Balancer**| HTTPS origin for dynamic requests<br>Port 443, SSL termination, cross-AZ load balancing.   |
 
-> **Network :** Hosted in **Public Subnets** (10.0.1.0/24, 10.0.10.0/24) with inbound 80/443 from the ALB only.
+> **Network:** ALB resides in public subnets (`10.0.1.0/24`, `10.0.10.0/24`)
 
+---
 
-### 2.  Application Tier — Business-Logic Layer  
-*Purpose :* Executes core logic, calls external APIs, writes/reads cache and DB.  
+## 2. Application Tier — Business Logic Layer  
+**Purpose:** Execute core application logic, read/write cache and database, call external APIs  
 
-| AWS Service                    | Role                                                                                           |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| **EC2 instances (Node.js / Tomcat / …)** | Runs application containers or processes.                                               |
-| **Auto Scaling Group**         | Spans both AZs for HA.                                                                         |
-| **NAT Gateway × 2**            | One per AZ; enables outbound traffic (OS patching, S3 log uploads, external API calls).        |
+| AWS Service               | Role                                                                                 |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| **Auto Scaling Group**    | Deploys App servers across two AZs (`10.0.2.0/24`, `10.0.11.0/24`)<br>Auto-scales on CPU & traffic. |
+| **Amazon EC2 App Servers**| Hosts business logic and APIs (Tomcat/Node.js).                                      |
 
-> **Network :** Deployed in **Private Subnets** (10.0.2.0/24, 10.0.11.0/24). Default route → AZ-local NAT GW.
+> **Network:** Private subnets (`10.0.2.0/24`, `10.0.11.0/24`)<br>  
+> **App SG**: allows inbound from ALB SG on ports 80/443
 
+---
 
-### 3.  Cache Tier — In-Memory Data Layer  
-*Purpose :* Reduce latency and offload repetitive reads/writes from the database.  
+## 3. Cache Tier — In-Memory Layer  
+**Purpose:** Offload repetitive database operations to reduce latency  
 
-| AWS Service                    | Role                                                                                           |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| **ElastiCache for Redis**      | Multi-AZ replication group – Primary in AZ-a, Replica in AZ-b with automatic fail-over.        |
+| AWS Service               | Role                          |
+| ------------------------- | ----------------------------- |
+| **ElastiCache for Redis** | Single-node Redis cache (port 6379) |
 
-> **Network :** Same private subnets as the Application Tier; only App-SG allowed on port 6379.
+> **Network:** same private subnets as the Application Tier
 
+---
 
-### 4.  Database Tier — Persistent Data Layer  
-*Purpose :* Durable storage for relational data.  
+## 4. Database Tier — Persistent Data Layer  
+**Purpose:** Durable relational data storage  
 
-| AWS Service                    | Role                                                                                           |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| **Amazon RDS (MySQL / PostgreSQL)** | Multi-AZ deployment – Primary in AZ-a, synchronous Standby in AZ-b. Automatic fail-over. |
+| AWS Service               | Role                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Amazon RDS (MySQL)**    | **Multi-AZ enabled**:<br>Primary in AZ1 (`10.0.3.0/24`) ↔ Standby in AZ2 (`10.0.12.0/24`)<br>Automatic failover |
 
-> **Network :** Dedicated **Data Subnets** (10.0.3.0/24, 10.0.12.0/24) without internet route.
+> **Network:** Data-Private subnets (`10.0.3.0/24`, `10.0.12.0/24`), no internet route
 
+---
 
-### Core Networking & Security Components
+## Core Networking & Security
 
-| Component                | Description                                                                                                            |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| **VPC 10.0.0.0/16**      | Isolated network containing all resources.                                                                             |
-| **Subnets**              | *Public :* 10.0.1.0/24, 10.0.10.0/24  -  *App Private :* 10.0.2.0/24, 10.0.11.0/24  -  *Data Private :* 10.0.3.0/24, 10.0.12.0/24 |
-| **Internet Gateway (IGW)** | Enables inbound/outbound internet for public subnets & ALB.                                                          |
-| **NAT Gateway × 2**       | Placed in each public subnet for egress from private subnets; resilient to single-AZ failure.                         |
-| **Route Tables**          | - Public RT → IGW   - Private-App RT → AZ NATGW   - Private-Data RT (no 0.0.0.0/0).                                    |
-| **Security Groups**       | Principle of least privilege (ALB→Web, Web→App, App→Redis/RDS).                                                       |
-| **AWS VPC Endpoints (Optional)** | S3 & DynamoDB Gateway endpoints, Interface endpoints for SSM/CloudWatch to reduce NAT traffic & cost.           |
+| Component                    | Description                                                                                                                            |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **VPC 10.0.0.0/16**          | Isolated network containing all resources.                                                                                             |
+| **Subnets**                  | • Public: `10.0.1.0/24`, `10.0.10.0/24` (ALB)<br>• App-Private: `10.0.2.0/24`, `10.0.11.0/24`<br>• Data-Private: `10.0.3.0/24`, `10.0.12.0/24` |
+| **Internet Gateway**         | Provides internet access for public subnets (ALB).                                                                                     |
+| **Route Tables**             | • Public RT → IGW<br>• App-Private RT → no 0.0.0.0/0<br>• Data-Private RT → no 0.0.0.0/0                                                  |
+| **Security Groups**          | • **ALB SG**: allows HTTPS (443) from CloudFront IP ranges<br>• **App SG**: allows 80/443 from ALB SG<br>• **Cache SG**: allows 6379 from App SG<br>• **DB SG**: allows 3306 from App SG |
 
-### Traffic Flow (high-level)
+---
 
-1. **Client → Route 53** → resolves DNS to ALB.  
-2. **Client → ALB** (TLS) → **AWS WAF** inspects request.  
-3. ALB forwards to **Web EC2** in the least-loaded AZ.  
-4. Web server proxies to **App EC2**  via private network.
-5. App checks **Redis**; on miss, queries **RDS**, then caches result.  
-6. Any outbound call (patch, external API, S3 log upload) exits via the AZ-local **NAT Gateway**.  
-7. Response propagates back up to the client.
+## Traffic Flow (High-Level)
 
+1. **Client → Route 53** resolves to your CloudFront distribution.  
+2. **Client → CloudFront** traffic is inspected by AWS WAF.  
+3. **Static requests** served from CloudFront edge cache (S3).  
+4. **Dynamic requests** forwarded: CloudFront → ALB (HTTPS) → EC2 App Servers in private subnets.  
+5. App Servers retrieve credentials, check Redis cache → on miss query RDS → cache the result.  
+6. Response returns: App → ALB → CloudFront → Client.
 
-### High-Availability & Resilience Highlights
+---
 
-* **Multi-AZ** Web/App instances, Redis replication, RDS synchronous standby.  
-* **Cross-zone ALB** ensures traffic distribution even if one AZ is impaired.  
-* **Per-AZ NAT Gateways** eliminate single points of failure for egress.  
-* **AWS WAF + SGs** provide layered security per AWS Well-Architected best practices.
+## High-Availability & Resilience
 
+- **Multi-AZ** App Servers & RDS (automatic failover).  
+- **Global edge** via CloudFront for minimal latency.  
+- **AWS WAF** + Security Groups for layered security.  
+- **ACM** automates TLS certificate management.
 
-<br>
+---
 
 ## Prerequisites
-
-Before you begin, ensure you have the following:
 
 1. **AWS Account** – active and in good standing.  
 2. **AWS CLI** – installed & configured (`aws configure`).  
 3. **Terraform** ≥ v1.3 (v1.6+ recommended).  
 4. **Git** – installed locally.  
-5. **Validated ACM Certificate** – in the target region for the public **ALB → HTTPS** listener.  
+5. **ACM Certificate ARN** – for the target region, defined in `terraform.tfvars`.
 
+---
 
-<br>
+## Key User Inputs (`terraform.tfvars`)
 
+| Variable                  | Required     | Description / Example                                              |
+| ------------------------- | ------------ | ------------------------------------------------------------------ |
+| `aws_region`              | optional     | e.g. `"ap-northeast-2"`                                            |
+| `project`                 | optional     | Prefix for resource names, e.g. `"my3tier"`                        |
+| `domain_name`             | **required** | Public DNS zone, e.g. `"example.com"`                              |
+| `acm_certificate_arn`     | **required** | ARN of an ACM certificate                                           |
+| `key_name`                | **required** | EC2 key-pair name for SSH/SSM break-glass                          |
+| `vpc_cidr`                | optional     | VPC CIDR block                                                    |
+| `public_subnet_cidrs`     | optional     | Public subnets’ CIDRs                                             |
+| `app_subnet_cidrs`        | optional     | App-Private subnets’ CIDRs                                        |
+| `data_subnet_cidrs`       | optional     | Data-Private subnets’ CIDRs                                       |
+| `availability_zones`      | optional     | e.g. `["ap-northeast-2a","ap-northeast-2c"]`                       |
+| `app_instance_type`       | optional     | e.g. `t3.micro`, `t3.small`                                       |
+| `db_instance_class`       | optional     | RDS instance class                                                |
+| `db_allocated_storage`    | optional     | RDS allocated storage (GB)                                        |
 
-## Key User Inputs (edit in terraform.tfvars)
+See `variables.tf` for the full list.
 
-| **Variable** | **Required?** | **Description / Example** |
-| --- | --- | --- |
-| aws_region | optional | "ap-northeast-2" |
-| project | optional | Prefix for resource names, e.g. "my3tier" |
-| domain_name | **required** | Public DNS zone, e.g. "example.com" |
-| acm_certificate_arn | **required** | ARN of an **ACM cert in the same region** (us-east-1 for CloudFront **not** valid here) |
-| key_name | **required** | EC2 key-pair name for SSH/SSM break-glass |
-| db_username | **required** | RDS master user |
-| db_password | **required & sensitive** | *Store in Secrets Manager or TF_VAR_* |
-| vpc_cidr, public_subnet_cidrs, app_subnet_cidrs, data_subnet_cidrs | optional | Custom CIDRs |
-| availability_zones | optional | ["ap-northeast-2a","ap-northeast-2c"] |
-| web_instance_type, app_instance_type | optional | t3.micro, t3.small, … |
-| db_instance_class, db_allocated_storage, … | optional | RDS sizing / engine |
-
-See variables.tf for a full catalogue.
+---
 
 ## Outputs
-| **Output** | **Purpose** |
-| --- | --- |
-| alb_dns | Public DNS of the HTTPS Application Load Balancer |
-| redis_primary_endpoint | Redis (ElastiCache) primary endpoint |
-| rds_endpoint | RDS primary endpoint |
-| route53_zone_id | Hosted-zone ID for your domain |
-| vpc_id | VPC identifier |
-| many more… | view with terraform output |
 
-<br>
+| Output                       | Description                                   |
+| ---------------------------- | --------------------------------------------- |
+| `alb_dns`                    | DNS name of the Application Load Balancer    |
+| `redis_primary_endpoint`     | ElastiCache Redis primary endpoint            |
+| `rds_endpoint`               | RDS primary endpoint                          |
+| `route53_zone_id`            | Hosted Zone ID for your domain                |
+| `vpc_id`                     | VPC identifier                                |
+| _and more…_                  | See `terraform output`                        |
 
+---
 
-## Cleaning Up
-
+## Cleanup
 Destroy all resources:
 ```bash
 terraform destroy
@@ -146,28 +150,6 @@ terraform destroy
 Type yes to confirm.
 
 > Warning : this removes the VPC, NAT Gateways, RDS, Redis, Route 53 records, etc.
-
-<br>
-
-## Disclaimer
-
-This template is a reference architecture combining:
--	Multi-AZ VPC (Public / App / Data subnets)
--	Route 53 + AWS WAF v2 + ALB (TLS 1.2+)
--	Web / App Auto Scaling Groups
--	Per-AZ NAT Gateways (egress for patching, S3 log upload, external APIs)
--	ElastiCache for Redis (primary+replica, automatic fail-over)
--	RDS Multi-AZ (MySQL/PostgreSQL)
--	VPC Gateway ⟶ S3 & DynamoDB, Interface Endpoints ⟶ SSM / CloudWatch
-
-Production hardening tasks still recommended:
--	Remote state backend (S3 + DynamoDB lock)
--	IAM least-privilege & CI/CD with tflint/tfsec
--	WAF custom rules, Shield Advanced (if public-facing)
--	ALB / WAF / Flow / RDS logs → S3 + Athena
--	Backup, encryption & cost-optimisation strategies
-
-> Use at your own risk and adapt to organisational policies.
 
 ---
 
@@ -185,130 +167,139 @@ Production hardening tasks still recommended:
 
 이 Terraform 프로젝트는 AWS 상에 다음과 같은 3티어 아키텍처를 프로비저닝합니다:
 
-### 1.  웹 계층 — 표현 계층  
-*목적 :* 사용자 트래픽을 수신하고, 정적 자산을 제공하며, 동적 요청을 하위 계층으로 프록시합니다.  
+# Terraform 3-Tier Web Architecture (AWS)
 
-| AWS 서비스                    | 역할                                                                                             |
-| ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| **Route 53**                 | 퍼블릭 DNS (`example.com → ALB`). 상태 확인 및 라우팅 정책 지원.                               |
-| **AWS WAF v2**               | ALB에 연결된 웹 애플리케이션 방화벽 (SQLi, XSS, 봇 차단, 속도 제한 규칙 등).                     |
-| **Application Load Balancer**| TLS 종료 및 가용 영역 간 로드 밸런싱 수행.                                                       |
-| **EC2 인스턴스 (Nginx / Apache)** | 정적 콘텐츠 제공 및 리버스 프록시 역할 수행.                                                |
-| **Auto Scaling Group**       | **AZ-a**, **AZ-b**의 *퍼블릭 서브넷*에서 웹 서버를 탄력적으로 확장.                            |
-
-> **네트워크 :** **퍼블릭 서브넷** (10.0.1.0/24, 10.0.10.0/24) 내에 위치하며, ALB로부터의 80/443 포트 인바운드만 허용.
-
-
-### 2.  애플리케이션 계층 — 비즈니스 로직 계층  
-*목적 :* 핵심 비즈니스 로직 실행, 외부 API 호출, 캐시 및 DB 읽기/쓰기 처리.  
-
-| AWS 서비스                          | 역할                                                                                             |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **EC2 인스턴스 (Node.js / Tomcat / …)** | 애플리케이션 컨테이너 또는 프로세스를 실행.                                                  |
-| **Auto Scaling Group**             | 고가용성을 위해 두 개의 AZ에 걸쳐 구성.                                                        |
-| **NAT Gateway × 2**                | 가용영역별 1개씩 구성; 아웃바운드 트래픽 (OS 패치, S3 로그 업로드, 외부 API 호출 등)을 허용.    |
-
-> **네트워크 :** **프라이빗 서브넷** (10.0.2.0/24, 10.0.11.0/24)에 배포. 기본 라우트는 AZ 로컬 NAT GW로 설정.
-
-
-### 3.  캐시 계층 — 인메모리 데이터 계층  
-*목적 :* 지연시간을 줄이고 데이터베이스의 반복적인 읽기/쓰기를 오프로드.  
-
-| AWS 서비스                 | 역할                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **ElastiCache for Redis**  | 다중 AZ 복제 그룹 – 기본 노드는 AZ-a, 복제 노드는 AZ-b. 자동 장애 조치 지원.                        |
-
-> **네트워크 :** 애플리케이션 계층과 동일한 프라이빗 서브넷 내에 위치. 포트 6379은 App-SG만 허용.
-
-
-### 4.  데이터베이스 계층 — 영속적 데이터 계층  
-*목적 :* 관계형 데이터를 위한 영속적인 저장소.  
-
-| AWS 서비스                         | 역할                                                                                                     |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **Amazon RDS (MySQL / PostgreSQL)** | 다중 AZ 배포 – 기본 인스턴스는 AZ-a, 동기식 스탠바이 인스턴스는 AZ-b에 존재. 자동 장애 조치 지원.     |
-
-> **네트워크 :** **데이터 전용 서브넷** (10.0.3.0/24, 10.0.12.0/24)에 위치. 인터넷 경로는 없음.
-
-
-### 핵심 네트워킹 및 보안 구성 요소
-
-| 구성 요소                   | 설명                                                                                                          |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **VPC 10.0.0.0/16**        | 모든 리소스를 포함하는 격리된 네트워크.                                                                      |
-| **서브넷**                 | *퍼블릭 :* 10.0.1.0/24, 10.0.10.0/24  -  *앱 프라이빗 :* 10.0.2.0/24, 10.0.11.0/24  -  *데이터 프라이빗 :* 10.0.3.0/24, 10.0.12.0/24 |
-| **Internet Gateway (IGW)** | 퍼블릭 서브넷 및 ALB의 인바운드/아웃바운드 인터넷 연결 지원.                                               |
-| **NAT Gateway × 2**        | 퍼블릭 서브넷마다 하나씩 구성되어 프라이빗 서브넷의 egress 트래픽을 담당. 단일 AZ 장애에 대한 복원력 제공. |
-| **라우트 테이블**          | - 퍼블릭 RT → IGW   - 프라이빗-앱 RT → AZ NATGW   - 프라이빗-데이터 RT (0.0.0.0/0 없음).                   |
-| **보안 그룹**              | 최소 권한 원칙 적용 (ALB→Web, Web→App, App→Redis/RDS).                                                       |
-| **AWS VPC 엔드포인트 (선택사항)** | S3 및 DynamoDB용 게이트웨이 엔드포인트, SSM/CloudWatch용 인터페이스 엔드포인트로 NAT 트래픽 및 비용 절감. |
-
-
-
-### 트래픽 흐름 (상위 레벨)
-
-1. **클라이언트 → Route 53** → DNS를 ALB로 해석.  
-2. **클라이언트 → ALB** (TLS) → **AWS WAF**가 요청 검사.  
-3. ALB는 **가장 적재가 적은 AZ**의 웹 EC2로 요청 전달.  
-4. 웹 서버는 **프라이빗 ALB 대상 그룹**을 통해 App EC2로 프록시 처리.  
-5. 애플리케이션은 먼저 **Redis**를 확인하고, 미스 발생 시 **RDS**를 조회한 뒤 결과를 캐시.  
-6. 아웃바운드 트래픽 (패치, 외부 API, S3 로그 업로드 등)은 해당 AZ의 **NAT Gateway**를 통해 나감.  
-7. 응답은 클라이언트로 역방향 전파됨.
+이 Terraform 프로젝트는 다음과 같은 최신 3-Tier 웹 애플리케이션 아키텍처를 AWS에 프로비저닝합니다.
 
 ---
 
-### 고가용성 및 복원력 하이라이트
+## 1. Web Tier — Global Presentation Layer  
+**목적:** 전 세계 사용자에게 정적·동적 콘텐츠를 최소 지연으로 제공  
 
-* **다중 AZ** 웹/앱 인스턴스, Redis 복제, RDS 동기식 스탠바이 구성.  
-* **크로스존 ALB**로 AZ 장애 시에도 트래픽 분산 보장.  
-* **AZ별 NAT 게이트웨이**로 egress 단일 장애 지점 제거.  
-* **AWS WAF + 보안 그룹**을 통한 AWS Well-Architected 보안 모범 사례 준수.
-  
-<br>
+| AWS Service                    | 역할                                                                                  |
+| ------------------------------ | ------------------------------------------------------------------------------------- |
+| **Route 53**                   | Public DNS(`example.com`) → CloudFront 도메인. 글로벌 라우팅 및 헬스체크.              |
+| **AWS WAF**                    | CloudFront 앞단에 웹 방화벽 배치<br>SQLi, XSS, 봇 차단, rate limiting 등               |
+| **Amazon CloudFront**          | 정적·동적 콘텐츠 모두 글로벌 에지에서 가속<br>Origin: S3(정적) & ALB(동적, HTTPS)       |
+| **AWS Certificate Manager**    | CloudFront와 ALB용 TLS 인증서 자동 프로비저닝·갱신                                    |
+| **Amazon S3**                  | 정적 자산 호스팅(HTML, CSS, JavaScript, 이미지 등)                                    |
+| **Application Load Balancer**  | CloudFront 동적 요청 수신(포트443, SSL 종료)<br>Cross-AZ 로드 밸런싱                   |
 
-## 사전 준비 사항
+> **Network:** ALB는 퍼블릭 서브넷(10.0.1.0/24, 10.0.10.0/24)에 배치
 
-시작하기 전에 다음 사항이 준비되어 있는지 확인하십시오:
+---
 
-1. **AWS 계정** – 활성화되어 있고 정상적인 상태여야 합니다.
-2. **AWS CLI** – 설치 및 구성 완료 (`aws configure`).
-3. **Terraform** ≥ v1.3 (v1.6 이상 권장).
-4. **Git** – 로컬에 설치.
-5. **검증된 ACM 인증서** – 대상 리전에 있어야 하며, 퍼블릭 **ALB → HTTPS** 리스너에 사용됩니다.
+## 2. Application Tier — Business Logic Layer  
+**목적:** 핵심 비즈니스 로직 실행, 캐시/DB 연동, 외부 API 호출  
 
+| AWS Service                  | 역할                                                                    |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| **Auto Scaling Group**       | 두 AZ(10.0.2.0/24, 10.0.11.0/24)에 App 서버 배포<br>CPU·트래픽 기반 자동 확장 |
+| **EC2 App Servers**          | Tomcat/Node.js 등 애플리케이션 호스팅 및 API 처리                       |
 
-<br>
+> **Network:** App-Private 서브넷(10.0.2.0/24, 10.0.11.0/24)<br>  
+> **App SG**: ALB SG→80/443 인바운드 허용
 
-## 주요 사용자 입력 항목 (terraform.tfvars 파일 편집)
+---
 
-| **변수** | **필수 여부?** | **설명 / 예시** |
-| --- | --- | --- |
-| aws\_region | 선택 사항 | "ap-northeast-2" |
-| project | 선택 사항 | 리소스 이름의 접두사, 예: "my3tier" |
-| domain\_name | **필수** | 퍼블릭 DNS 존, 예: "example.com" |
-| acm\_certificate\_arn | **필수** | **동일 리전에 있는 ACM 인증서의 ARN** (CloudFront용 us-east-1 인증서는 여기서 유효하지 않습니다) |
-| key\_name | **필수** | SSH/SSM 긴급 접근을 위한 EC2 키 페어 이름 |
-| db\_username | **필수** | RDS 마스터 사용자 이름 |
-| db\_password | **필수 & 민감**| *Secrets Manager 또는 TF\_VAR\_에 저장* |
-| vpc\_cidr, public\_subnet\_cidrs, app\_subnet\_cidrs, data\_subnet\_cidrs | 선택 사항 | 사용자 지정 CIDR |
-| availability\_zones | 선택 사항 | ["ap-northeast-2a","ap-northeast-2c"] |
-| web\_instance\_type, app\_instance\_type | 선택 사항 | t3.micro, t3.small, … |
-| db\_instance\_class, db\_allocated\_storage, … | 선택 사항 | RDS 크기 조정 / 엔진 |
+## 3. Cache Tier — In-Memory Layer  
+**목적:** 반복적 읽기·쓰기 오프로드로 DB 부담 경감  
 
-전체 목록은 variables.tf를 참조하십시오.
+| AWS Service               | 역할                        |
+| ------------------------- | --------------------------- |
+| **ElastiCache for Redis** | 단일 노드 Redis 캐시(포트6379) |
 
-## 출력 항목
+> **Network:** Application Tier와 동일 프라이빗 서브넷
 
-| **출력 항목** | **용도** |
-| --- | --- |
-| alb\_dns | HTTPS Application Load Balancer의 퍼블릭 DNS |
-| redis\_primary\_endpoint | Redis (ElastiCache) 주 엔드포인트 |
-| rds\_endpoint | RDS 주 엔드포인트 |
-| route53\_zone\_id | 도메인의 호스팅 존 ID |
-| vpc\_id | VPC 식별자 |
-| many more… | terraform output으로 확인 가능 |
+---
 
+## 4. Database Tier — Persistent Data Layer  
+**목적:** 내구성 있는 관계형 데이터 스토리지  
 
+| AWS Service                    | 역할                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------ |
+| **Amazon RDS (MySQL)**         | **Multi-AZ 활성화**<br>AZ1(10.0.3.0/24): Primary ↔ AZ2(10.0.12.0/24): Standby<br>자동 장애 조치 |
+
+> **Network:** Data-Private 서브넷(10.0.3.0/24, 10.0.12.0/24)<br>인터넷 접근 없음
+
+---
+
+## Core Networking & Security
+
+| 구성요소                   | 설명                                                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **VPC 10.0.0.0/16**        | 모든 리소스를 포함하는 격리 네트워크                                                                                        |
+| **Subnets**                | - Public: 10.0.1.0/24, 10.0.10.0/24 (ALB)<br>- App-Private: 10.0.2.0/24, 10.0.11.0/24<br>- Data-Private: 10.0.3.0/24, 10.0.12.0/24 |
+| **Internet Gateway**       | 퍼블릭 서브넷(ALB)에 인터넷 연결 제공                                                                                         |
+| **Route Tables**           | - Public RT → IGW<br>- App-Private RT → 인터넷 경로 없음<br>- Data-Private RT → 인터넷 경로 없음                                |
+| **Security Groups**        | - **ALB SG**: CloudFront IP 범위에서 443 허용<br>- **App SG**: ALB SG→80/443 허용<br>- **Cache SG**: App SG→6379 허용<br>- **DB SG**: App SG→3306 허용 |
+
+---
+
+## Traffic Flow (High-Level)
+
+1. **Client → Route 53** → CloudFront 도메인으로 DNS 해석  
+2. **Client → CloudFront** → AWS WAF 검사  
+3. **정적 요청** → 에지 캐시(S3)에서 곧바로 응답  
+4. **동적 요청** → CloudFront → ALB(HTTPS) → Private EC2 App Server  
+5. App Server가 엣지된 **Redis** 캐시 조회 → miss 시 **RDS** 조회 → 결과 캐시  
+6. 처리 결과 → ALB → CloudFront → Client
+
+---
+
+## High-Availability & Resilience
+
+- **Multi-AZ** App Servers & RDS (자동 장애 조치)  
+- **Global Edge** via CloudFront (최저 지연)  
+- **AWS WAF** + Security Groups (다계층 보안)  
+- **ACM** 자동 TLS 인증서 관리
+
+---
+
+## Prerequisites
+
+1. **AWS Account** – 활성화된 상태  
+2. **AWS CLI** ≥ v2 – 설치 및 `aws configure`  
+3. **Terraform** ≥ v1.3 (v1.6+ 권장)  
+4. **Git** – 로컬 설치  
+5. **ACM Certificate ARN** – 대상 리전의 ACM 인증서 ARN  
+
+---
+
+## Key User Inputs (`terraform.tfvars`)
+
+| 변수 이름                 | 필수 여부     | 설명 / 예시                            |
+| ------------------------- | ------------- | -------------------------------------- |
+| `aws_region`              | optional      | `"ap-northeast-2"`                     |
+| `project`                 | optional      | 리소스 이름 접두사, 예: `"my3tier"`     |
+| `domain_name`             | **required**  | 퍼블릭 DNS 존, 예: `"example.com"`     |
+| `acm_certificate_arn`     | **required**  | ACM TLS 인증서 ARN                     |
+| `key_name`                | **required**  | EC2 SSH KeyPair 이름                   |
+| `vpc_cidr`                | optional      | VPC CIDR, 기본 사용 가능               |
+| `public_subnet_cidrs`     | optional      | Public 서브넷 CIDRs                    |
+| `app_subnet_cidrs`        | optional      | App-Private 서브넷 CIDRs               |
+| `data_subnet_cidrs`       | optional      | Data-Private 서브넷 CIDRs              |
+| `availability_zones`      | optional      | `["ap-northeast-2a","ap-northeast-2c"]` |
+| `app_instance_type`       | optional      | `t3.micro`, `t3.small` 등              |
+| `db_instance_class`       | optional      | RDS 인스턴스 클래스                    |
+| `db_allocated_storage`    | optional      | RDS 스토리지 크기(GB)                  |
+
+전체 변수 목록은 `variables.tf` 참조.
+
+---
+
+## Outputs
+
+| 출력 이름                   | 설명                                        |
+| --------------------------- | ------------------------------------------- |
+| `alb_dns`                   | Application Load Balancer 도메인 이름       |
+| `redis_primary_endpoint`    | ElastiCache Redis 엔드포인트                |
+| `rds_endpoint`              | RDS Primary 엔드포인트                     |
+| `route53_zone_id`           | Route 53 Hosted Zone ID                    |
+| `vpc_id`                    | VPC ID                                     |
+| _and more…_                 | `terraform output` 확인                    |
+
+---
 
 ## 정리하기
 
@@ -325,23 +316,18 @@ terraform destroy
 
 ## 면책 조항
 
-이 템플릿은 다음을 결합한 참조 아키텍처입니다:
+이 템플릿은 아래를 조합한 참조 아키텍처 예시입니다:
+-	단일 리전 VPC (Public / App-Private / Data-Private 서브넷)
+-	Route 53 + AWS WAF v2 + CloudFront + ALB (TLS 1.2+)
+-	Auto Scaling App Servers (멀티 AZ)
+-	ElastiCache for Redis (싱글 노드)
+-	RDS Multi-AZ (MySQL)
 
-  - 다중 AZ VPC (Public / App / Data 서브넷)
-  - Route 53 + AWS WAF v2 + ALB (TLS 1.2 이상)
-  - 웹 / 앱 Auto Scaling Group
-  - AZ별 NAT Gateway (패치, S3 로그 업로드, 외부 API를 위한 이그레스)
-  - Redis용 ElastiCache (기본 + 복제본, 자동 장애 조치)
-  - RDS 다중 AZ (MySQL/PostgreSQL)
-  - VPC Gateway ⟶ S3 & DynamoDB, Interface Endpoints ⟶ SSM / CloudWatch
-
-프로덕션 환경 강화를 위해 권장되는 추가 작업:
-
-  - 원격 상태 백엔드 (S3 + DynamoDB 잠금)
-  - IAM 최소 권한 & tflint/tfsec을 사용한 CI/CD
-  - WAF 사용자 지정 규칙, Shield Advanced (퍼블릭 노출 시)
-  - ALB / WAF / Flow / RDS 로그 → S3 + Athena
-  - 백업, 암호화 및 비용 최적화 전략
+프로덕션 환경 적용 시 다음 추가 작업을 권장합니다:
+-	Remote state backend (S3 + DynamoDB lock)
+-	IAM least-privilege & CI/CD 보안 검사(tflint, tfsec)
+-	ALB / WAF / RDS 로그 수집 → S3 + Athena 분석
+-	백업, 암호화 & 비용 최적화 전략
 
 > 자신의 책임 하에 사용하고 조직 정책에 맞게 조정하십시오.
 
