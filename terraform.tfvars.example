@@ -1,5 +1,5 @@
-aws_region = "us-west-2" // Example region
-availability_zones = ["us-west-2a", "us-west-2b"] // IMPORTANT: Match these to your region and CIDR layout
-domain_name = "your-actual-domain.com." // IMPORTANT: Must be a domain you manage in Route 53
-// acm_certificate_arn = "arn:aws:acm:us-west-2:123456789012:certificate/your-cert-id" // If using HTTPS
-// db_password = "aVeryStrongPassword123!" // Or let it generate one
+aws_region          = "ap-northeast-2"
+project             = "my3tier"
+domain_name         = "example.com"
+acm_certificate_arn = "arn:aws:acm:ap-northeast-2:123456789012:certificate/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+key_name            = "your-ec2-keypair"

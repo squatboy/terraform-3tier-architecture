@@ -1,16 +1,16 @@
-// route53.tf
+# Route53 record
+data "aws_route53_zone" "zone" {
+  name         = var.domain_name
+  private_zone = false
+}
 
-//------------------------------------------------------------------------------
-// Route 53 DNS Record for the Application
-//------------------------------------------------------------------------------
-resource "aws_route53_record" "app_dns" {
-  zone_id = data.aws_route53_zone.selected.zone_id       // From data.tf
-  name    = "app.${data.aws_route53_zone.selected.name}" // e.g., app.example.com.
-  type    = "A"                                          // A record for IPv4
-
+resource "aws_route53_record" "www" {
+  zone_id = data.aws_route53_zone.zone.zone_id
+  name    = var.domain_name
+  type    = "A"
   alias {
-    name                   = aws_lb.main.dns_name // DNS name of the ALB
-    zone_id                = aws_lb.main.zone_id  // Hosted zone ID of the ALB
-    evaluate_target_health = true                 // Route traffic based on ALB health
+    name                   = aws_cloudfront_distribution.cf.domain_name
+    zone_id                = aws_cloudfront_distribution.cf.hosted_zone_id
+    evaluate_target_health = false
   }
 }

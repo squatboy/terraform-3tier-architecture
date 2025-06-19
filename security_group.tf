@@ -8,7 +8,7 @@ resource "aws_security_group" "alb" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]  # replace with CloudFront IP ranges in prod
+    cidr_blocks = ["0.0.0.0/0"] # replace with CloudFront IP ranges in prod
   }
   egress {
     from_port   = 0
